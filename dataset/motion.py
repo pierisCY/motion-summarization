@@ -11,7 +11,7 @@ from bvh.bvh_writer import WriterWrapper
 
 class MotionData:
     def __init__(self, filename, repr='quat', padding=False,
-                 use_velo=False, no_scale=False, contact=False, keep_y_pos=False,
+                 use_velo=False, no_scale=True, contact=False, keep_y_pos=False,
                  joint_reduction=True):
         print(filename, no_scale, contact,joint_reduction)
         self.bvh_file = BVH_file(filename, no_scale, requires_contact=contact,
