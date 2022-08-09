@@ -113,10 +113,8 @@ def read_bvh(image_path):
 
 
 def save_image(input_path,image_tensor, image_path,conf,obj):
-    real,motion_data = read_bvh(input_path)
-    x = torch.rand_like(image_tensor) - 0.5 * 2.0 / 255.0
-    imgs = draw_example([obj.gan.G], 'random', torch.stack([x])[0][0],[x.shape[3]], x, 1, conf, all_img=True, conds=None, full_noise=0, given_noise=[x])               
-    motion_data.write(image_path, imgs[0][0])
+    real,motion_data = read_bvh(input_path)             
+    motion_data.write(image_path, image_tensor[0]
 
 
 def get_scale_weights(i, max_i, start_factor, input_shape, min_size, num_scales_limit, scale_factor):
