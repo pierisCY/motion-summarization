@@ -10,6 +10,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
 
+def motion_consistency_loss(real_images):
+    return torch.mean(torch.abs(real_images[:,0:-1,:,:] - real_images[:,1:,:,:])) + torch.mean(torch.abs(real_images[:,0:-2,:,:] - real_images[:,2:,:,:])) 
+
 class LRPolicy(object):
     def __init__(self, start, end):
         self.start = start
@@ -53,12 +56,14 @@ class InGAN:
 
         # Define loss function
         self.criterionGAN = self.GAN_loss_layer.forward
+        self.gp_loss =  self.GAN_loss_layer.forward_D
         self.criterionReconstruction = self.Reconstruct_loss.forward
 
         # Keeping track of losses- prepare tensors
         self.losses_G_gan = torch.FloatTensor(conf.print_freq).cuda()
         self.losses_D_real = torch.FloatTensor(conf.print_freq).cuda()
         self.losses_D_fake = torch.FloatTensor(conf.print_freq).cuda()
+        self.losses_GP = torch.FloatTensor(conf.print_freq).cuda()
         self.losses_G_reconstruct = torch.FloatTensor(conf.print_freq).cuda()
         if self.conf.reconstruct_loss_stop_iter > 0:
             self.losses_D_reconstruct = torch.FloatTensor(conf.print_freq).cuda()
@@ -203,9 +208,8 @@ class InGAN:
             max_scale=self.conf.max_scale,
             max_transform_magniutude=self.conf.max_transform_magnitude
         )
-        output_size = (192,output_size[1])
-        # Add noise to G input for better generalization (make it ignore the 1/255 binning)
-        self.input_tensor_noised = self.input_tensor + (torch.rand_like(self.input_tensor) - 0.5) * 2.0 / 255
+        output_size = (192,self.input_tensor.shape[3])
+        self.input_tensor_noised = self.input_tensor
 
         # Generator forward pass
         self.G_pred = self.G.forward(self.input_tensor_noised, output_size=output_size, random_affine=random_affine)
@@ -232,6 +236,7 @@ class InGAN:
         # Calculate generator loss, based on discriminator prediction on generator result
         self.loss_G_GAN = self.criterionGAN(d_pred_fake, is_d_input_real=True)
         
+
         # Generator final loss
         # Weighted average of the two losses (if indicated to use reconstruction loss)
         if self.conf.reconstruct_loss_stop_iter < self.cur_iter:
@@ -269,15 +274,13 @@ class InGAN:
         # Zeroize gradients
         self.optimizer_D.zero_grad()
 
-        # Adding noise to D input to prevent overfitting to 1/255 bins
-        real_example_with_noise = self.real_example + (torch.rand_like(self.real_example[-1]) - 0.5) * 2.0 / 255.0
+        real_example_with_noise = self.real_example
 
         # Discriminator forward pass over real example
         self.d_pred_real = self.D.forward(real_example_with_noise, self.scale_weights)
 
-        # Adding noise to D input to prevent overfitting to 1/255 bins
         # Note that generator result is detached so that gradients are not propagating back through generator
-        g_pred_with_noise = self.G_pred.detach() + (torch.rand_like(self.G_pred) - 0.5) * 2.0 / 255
+        g_pred_with_noise = self.G_pred.detach() 
 
         # Discriminator forward pass over generated example example
         self.d_pred_fake = self.D.forward(g_pred_with_noise, self.scale_weights)
@@ -292,6 +295,9 @@ class InGAN:
         # noinspection PyUnresolvedReferences
         self.loss_D.backward(retain_graph=True)
         # Update weights
+        self.gp = self.gp_loss(self.D,self.scale_weights,self.real_example,self.G_pred,self.conf)
+        
+        
         # Note that only discriminator weights are updated (by definition of the D optimizer)
         self.optimizer_D.step()
 
@@ -339,5 +345,6 @@ class InGAN:
         self.losses_G_gan[cur_iter % self.conf.print_freq] = self.loss_G_GAN.item()
         self.losses_D_fake[cur_iter % self.conf.print_freq] = self.loss_D_fake.item()
         self.losses_D_real[cur_iter % self.conf.print_freq] = self.loss_D_real.item()
+        self.losses_GP[cur_iter % self.conf.print_freq] = self.gp.item()
         if self.conf.reconstruct_loss_stop_iter > self.cur_iter:
             self.losses_G_reconstruct[cur_iter % self.conf.print_freq] = self.loss_G_reconstruct.item()

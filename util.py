@@ -81,6 +81,7 @@ def random_size(
     # set new size for the output image
     new_size = np.array(orig_size) * (cur_min_scale + (cur_max_scale - cur_min_scale) * np.random.rand(2))
     
+
     return tuple(np.uint32(np.ceil(new_size * 1.0 / must_divide) * must_divide)), random_affine
 
 
@@ -114,7 +115,7 @@ def read_bvh(image_path):
 def save_image(input_path,image_tensor, image_path,conf,obj):
     real,motion_data = read_bvh(input_path)
     x = torch.rand_like(image_tensor) - 0.5 * 2.0 / 255.0
-    imgs = draw_example([obj.gan.G], 'random', torch.stack([x])[0][0],[x.shape[3]], x, 1, conf, all_img=True, conds=None, full_noise=0, given_noise=[x])  
+    imgs = draw_example([obj.gan.G], 'random', torch.stack([x])[0][0],[x.shape[3]], x, 1, conf, all_img=True, conds=None, full_noise=0, given_noise=[x])               
     motion_data.write(image_path, imgs[0][0])
 
 
@@ -122,9 +123,6 @@ def get_scale_weights(i, max_i, start_factor, input_shape, min_size, num_scales_
     num_scales = np.min(
         [np.int(np.ceil(np.log(np.min(input_shape) * 1.0 / min_size) / np.log(scale_factor))), num_scales_limit]
     )
-
-    # if i > max_i * 2:
-    #     i = max_i * 2
 
     factor = start_factor**((max_i - i) * 1.0 / max_i)
 
@@ -146,6 +144,7 @@ class Visualizer:
         self.G_loss = [None] * conf.max_iters
         self.D_loss_real = [None] * conf.max_iters
         self.D_loss_fake = [None] * conf.max_iters
+        self.losses_GP = [None] * conf.max_iters
 
         self.test_inputs = test_inputs
         self.test_input_sizes = [test_input.shape[2:] for test_input in test_inputs]
@@ -154,19 +153,15 @@ class Visualizer:
             self.Rec_loss = [None] * conf.max_iters
 
     def recreate_fig(self):
-        self.fig = plt.figure(figsize=(18, 9))
-        gs = gridspec.GridSpec(8, 8)
-        self.result = self.fig.add_subplot(gs[0:8, 0:4])
-        self.gan_loss = self.fig.add_subplot(gs[0:2, 5:8])
-        self.reconstruct_loss = self.fig.add_subplot(gs[3:5, 5:8])
-        self.reconstruction = self.fig.add_subplot(gs[6:8, 5:6])
-        self.real_example = self.fig.add_subplot(gs[7, 6])
-        self.d_map_real = self.fig.add_subplot(gs[7, 7])
+        self.fig = plt.figure(figsize=(50, 25))
+        gs = gridspec.GridSpec(9,8)
+        self.gan_loss = self.fig.add_subplot(gs[0:4, 0:8])
+        self.reconstruct_loss = self.fig.add_subplot(gs[5:9, 0:8])
 
         # First plot data
-        self.plot_gan_loss = self.gan_loss.plot([], [], 'b-', [], [], 'c--', [], [], 'r--')
-        self.gan_loss.legend(('Generator loss', 'Discriminator loss (real image)', 'Discriminator loss (fake image)'))
-        self.gan_loss.set_ylim(0, 1)
+        self.plot_gan_loss = self.gan_loss.plot([], [], 'b-', [], [], 'c--', [], [], 'r--', [], [], 'g--')
+        self.gan_loss.legend(('Generator loss', 'Discriminator loss (real)', 'Discriminator loss (fake)'))
+        self.gan_loss.set_ylim(0,1)
 
         if self.conf.reconstruct_loss_stop_iter > 0:
             self.plot_reconstruct_loss = self.reconstruct_loss.semilogy([], [])
@@ -174,18 +169,21 @@ class Visualizer:
         # Set titles
         self.gan_loss.set_title('Gan Losses')
         self.reconstruct_loss.set_title('Reconstruction Loss')
-        self.reconstruction.set_title('Reconstruction')
-        self.d_map_real.set_xlabel('Current Discriminator \n map for real example')
-        self.real_example.set_xlabel('Real example')
-        self.result.set_title('Current result')
+        
+    def recreate_fig_GP(self):
+        self.fig = plt.figure(figsize=(50, 25))
+        gs = gridspec.GridSpec(9,8)
+        self.plot_gp = self.fig.add_subplot(gs[0:9, 0:8])
 
-        self.result.axes.get_xaxis().set_visible(False)
-        self.result.axes.get_yaxis().set_visible(False)
-        self.reconstruction.axes.get_xaxis().set_visible(False)
-        self.reconstruction.axes.get_yaxis().set_visible(False)
-        self.d_map_real.axes.get_yaxis().set_visible(False)
-        self.real_example.axes.get_yaxis().set_visible(False)
-        self.result.axes.get_yaxis().set_visible(False)
+        # First plot data
+        self.plot_gp_loss = self.plot_gp.plot([], [], 'g-')
+        self.plot_gp.legend(('Gradient Penalty'))
+        self.plot_gp.set_ylim(0,50)
+
+
+        # Set titles
+        self.plot_gp.set_title('Gradient Penalty')
+
 
     def test_and_display(self, input_path, i):
         if not i % self.conf.print_freq and i > 0:
@@ -194,6 +192,8 @@ class Visualizer:
                              self.conf.print_freq:i] = self.gan.losses_D_real.detach().cpu().float().numpy().tolist()
             self.D_loss_fake[i -
                              self.conf.print_freq:i] = self.gan.losses_D_fake.detach().cpu().float().numpy().tolist()
+            self.losses_GP[i -
+                             self.conf.print_freq:i] = self.gan.losses_GP.detach().cpu().float().numpy().tolist()                 
             if self.conf.reconstruct_loss_stop_iter > i:
                 self.Rec_loss[i - self.conf.print_freq:i] = self.gan.losses_G_reconstruct.detach().cpu().float().numpy(
                 ).tolist()
@@ -201,8 +201,8 @@ class Visualizer:
             if self.conf.reconstruct_loss_stop_iter < i:
                 print(
                     (
-                        'iter: %d, G_loss: %f, D_loss_real: %f, D_loss_fake: %f, LR: %f' % (
-                            i, self.G_loss[i - 1], self.D_loss_real[i - 1], self.D_loss_fake[i - 1],
+                        'iter: %d, G_loss: %f, D_loss (Real): %f, D_loss (Fake): %f, Gradient Penalty: %f, LR: %f' % (
+                            i, self.G_loss[i - 1],self.D_loss_real[i - 1],self.D_loss_fake[i - 1],self.losses_GP[i - 1],
                             self.gan.lr_scheduler_G.get_lr()[0]
                         )
                     )
@@ -210,8 +210,8 @@ class Visualizer:
             else:
                 print(
                     (
-                        'iter: %d, G_loss: %f, D_loss_real: %f, D_loss_fake: %f, Rec_loss: %f, LR: %f' % (
-                            i, self.G_loss[i - 1], self.D_loss_real[i - 1], self.D_loss_fake[i - 1],
+                        'iter: %d, G_loss: %f, D_loss (Real): %f, D_loss (Fake): %f, Gradient Penalty: %f, Rec_loss: %f, LR: %f' % (
+                            i, self.G_loss[i - 1], self.D_loss_real[i - 1],self.D_loss_fake[i - 1],self.losses_GP[i - 1],
                             self.Rec_loss[i - 1], self.gan.lr_scheduler_G.get_lr()[0]
                         )
                     )
@@ -239,14 +239,26 @@ class Visualizer:
                 self.reconstruct_loss.set_ylim(np.min(self.Rec_loss[:i]), np.max(self.Rec_loss[:i]))
                 self.reconstruct_loss.set_xlim(0, i)
 
+            """
             self.d_map_real.imshow(
                 self.gan.d_pred_real[0:1, :, :, :].detach().cpu().float().numpy().squeeze(),
                 cmap='gray',
                 vmin=0,
                 vmax=1
             )
+            
             if self.conf.reconstruct_loss_stop_iter > i:
                 self.reconstruction.imshow(np.clip(image_concat([tensor2im(reconstructs)]), 0, 255), vmin=0, vmax=255)
+            """
+            plt.savefig(self.conf.output_dir_path + '/monitor_%d' % i)
+            
+            plt.gcf().clear()
+            plt.close()
+            self.recreate_fig_GP()
+            
+            self.plot_gp_loss[0].set_data(list(range(i)), self.losses_GP[:i])
+            self.plot_gp.set_xlim(0, 10)
+            plt.savefig(self.conf.output_dir_path + '/monitor_GP_%d' % i)
             
             save_image(input_path,self.gan.G_pred, self.conf.output_dir_path + '/result_iter_%d.bvh' % i,self.conf,self)
 

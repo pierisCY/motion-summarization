@@ -88,8 +88,6 @@ def realtime_example(gens, lengths, amps, conditions, trajs, args, layered_mask,
 
     imgs = []
     prev_img = torch.zeros((1, conditions[0].shape[1], lengths[0]), device=device)
-    # prev_img[:, :conditions[0].shape[1]] = conditions[0]
-    # prev_img[:, conditions[0].shape[1]:, layered_mask] = trajs
     for step, (gen, length, amp, cond, traj) in enumerate(zip(gens, lengths, amps, conditions, trajs)):
         length_cond = cond.shape[-1]
         length_traj = traj.shape[-1]
@@ -274,6 +272,7 @@ def draw_example(gens, mode, z_star, lengths, amps, batch_size, args, all_img=Fa
             amp = 0.
         if current_mode == 'random' or current_mode == 'manip' or current_mode == 'cond':
             n_channel = z_star.shape[1] if full_noise else 1
+            print(batch_size, n_channel, length,amp.shape)
             noise = torch.randn((batch_size, amp.shape[1], amp.shape[2]), device=device) * amp
             if given_noise is not None and step < len(given_noise):
                 noise = given_noise[step]

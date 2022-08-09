@@ -14,6 +14,8 @@ from os.path import join as pjoin
 import time
 from torch.utils.tensorboard import SummaryWriter
 
+
+
 # Load configuration
 conf = Config().parse()
 # Prepare data
@@ -21,9 +23,9 @@ input_images1 = MotionData(conf.input_image_path[0],padding=1,use_velo=1,contact
 gen, input_images = create_model(conf, input_images1, evaluation=False)
 input_images = [input_images(input_images1.raw_motion.cuda())]
 input_images = torch.stack(input_images)                            
+
 # Create complete model
 gan = InGAN(conf)
-
 # If required, fine-tune from some checkpoint
 if conf.resume is not None:
     gan.resume(os.path.join(conf.resume))

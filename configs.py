@@ -9,7 +9,8 @@ class Config:
     def __init__(self):
         self.parser = argparse.ArgumentParser()
         self.conf = None
-
+        
+        self.parser.add_argument('--contact', type=int, default=0)
         # Paths
         self.parser.add_argument(
             '--input_image_path',
@@ -120,7 +121,7 @@ class Config:
             default=20000,
             help='iteration from which linear decay of lr starts until max_iter'
         )
-        self.parser.add_argument('--beta1', type=float, default=0.5, help='momentum term of adam')
+        self.parser.add_argument('--beta1', type=float, default=0.9, help='momentum term of adam')
         self.parser.add_argument('--curriculum', type=bool, default=True, help='Enable curriculum learning')
         self.parser.add_argument(
             '--iter_for_max_range',
@@ -128,10 +129,15 @@ class Config:
             default=10000,
             help='In curriculum learning, when getting to this iteration all range is covered'
         )
+        
+        self.parser.add_argument('--lambda_consistency',type=float, default=5)
+        self.parser.add_argument('--lambda_gp',type=float, default=1)
+        
+        
 
         # Sizes
-        self.parser.add_argument('--input_crop_size', type=int, default=256, help='input is cropped to this size')
-        self.parser.add_argument('--output_crop_size', type=int, default=256, help='output is cropped to this size')
+        self.parser.add_argument('--input_crop_size', type=int, default=192, help='input is cropped to this size')
+        self.parser.add_argument('--output_crop_size', type=int, default=192, help='output is cropped to this size')
         self.parser.add_argument('--max_scale', type=float, default=2.25, help='max retargeting scale')
         self.parser.add_argument('--min_scale', type=float, default=0.15, help='min retargeting scale')
         self.parser.add_argument(
@@ -156,7 +162,7 @@ class Config:
 
         # Monitoring display frequencies
         self.parser.add_argument(
-            '--display_freq', type=int, default=200, help='frequency of showing training results on screen'
+            '--display_freq', type=int, default=1000, help='frequency of showing training results on screen'
         )
         self.parser.add_argument(
             '--print_freq', type=int, default=20, help='frequency of showing training results on console'
@@ -166,7 +172,7 @@ class Config:
         )
 
         # Iterations
-        self.parser.add_argument('--max_iters', type=int, default=75000, help='max # of iters')
+        self.parser.add_argument('--max_iters', type=int, default=90000, help='max # of iters')
         self.parser.add_argument(
             '--G_iters', type=int, default=1, help='# of sub-iters for the generator per each global iteration'
         )

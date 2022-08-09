@@ -13,7 +13,6 @@ class MotionData:
     def __init__(self, filename, repr='quat', padding=False,
                  use_velo=False, no_scale=True, contact=False, keep_y_pos=False,
                  joint_reduction=True):
-        print(filename, no_scale, contact,joint_reduction)
         self.bvh_file = BVH_file(filename, no_scale, requires_contact=contact,
                                  joint_reduction=joint_reduction)
         self.contact = contact
@@ -108,7 +107,6 @@ class MotionData:
         :returns pos, rot, contact (if exists)
         """
         motion = motion.clone()
-
         if self.n_pad:
             motion = motion[:, :-self.n_pad]
         if self.use_velo and not keep_velo:

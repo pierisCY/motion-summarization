@@ -9,6 +9,7 @@ class Conv1dModel(nn.Module):
     def __init__(self, channels, kernel_size, padding=-1, last_active='None', padding_mode='zeros', batch_norm=False,
                  skeleton_aware=False, neighbour_list=None, activation='LeakyReLU'):
         super(Conv1dModel, self).__init__()
+        #print("??")
         conv1d = functools.partial(SkeletonConv, neighbour_list=neighbour_list, joint_num=len(neighbour_list)) \
             if skeleton_aware else nn.Conv1d
         if padding == -1:
@@ -17,6 +18,7 @@ class Conv1dModel(nn.Module):
             padding = (kernel_size - 1) // 2
         self.layers = nn.ModuleList()
         for i in range(len(channels) - 1):
+            #print(channels)
             in_c = channels[i]
             out_c = channels[i + 1]
             if i == len(channels) - 2 and out_c == 1:
@@ -26,7 +28,8 @@ class Conv1dModel(nn.Module):
                 bias = True
             seq = [conv1d(in_channels=in_c, out_channels=out_c, kernel_size=kernel_size,
                           padding=padding, padding_mode=padding_mode, bias=bias)]
-                                      
+         
+                          
             if i < len(channels) - 2:
                 if batch_norm:
                     seq.append(nn.BatchNorm1d(num_features=out_c))
