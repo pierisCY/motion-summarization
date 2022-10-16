@@ -130,14 +130,14 @@ class Config:
             help='In curriculum learning, when getting to this iteration all range is covered'
         )
         
-        self.parser.add_argument('--lambda_consistency',type=float, default=5)
+       
         self.parser.add_argument('--lambda_gp',type=float, default=1)
         
         
 
         # Sizes
-        self.parser.add_argument('--input_crop_size', type=int, default=192, help='input is cropped to this size')
-        self.parser.add_argument('--output_crop_size', type=int, default=192, help='output is cropped to this size')
+        self.parser.add_argument('--input_crop_size', type=int, default=256, help='input is cropped to this size')
+        self.parser.add_argument('--output_crop_size', type=int, default=256, help='output is cropped to this size')
         self.parser.add_argument('--max_scale', type=float, default=2.25, help='max retargeting scale')
         self.parser.add_argument('--min_scale', type=float, default=0.15, help='min retargeting scale')
         self.parser.add_argument(
@@ -172,12 +172,12 @@ class Config:
         )
 
         # Iterations
-        self.parser.add_argument('--max_iters', type=int, default=90000, help='max # of iters')
+        self.parser.add_argument('--max_iters', type=int, default=60000, help='max # of iters')
         self.parser.add_argument(
             '--G_iters', type=int, default=1, help='# of sub-iters for the generator per each global iteration'
         )
         self.parser.add_argument(
-            '--D_iters', type=int, default=1, help='# of sub-iters for the discriminator per each global iteration'
+            '--D_iters', type=int, default=2, help='# of sub-iters for the discriminator per each global iteration'
         )
 
         # Losses

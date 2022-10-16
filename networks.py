@@ -137,6 +137,7 @@ class Generator(nn.Module):
 
         # Downscaling
         # A sequence of strided conv-blocks. Image dims shrink by 2, channels dim expands by 2 at each block
+        #print("n_down\n",n_downsampling)
         self.downscale_block = RescaleBlock(n_downsampling, 0.5, base_channels, True)
 
         # Bottleneck
@@ -172,6 +173,8 @@ class Generator(nn.Module):
 
         # Bottleneck (res-blocks)
         feature_map = self.bottleneck_block(feature_map)
+        #print('feat')
+        #print(len(feature_map[0]),len(feature_map[0][0]),len(downscales[0]),len(downscales[0][0]))
 
         # Upscale block
         feature_map, _ = self.upscale_block.forward(feature_map, pyramid=downscales, skip=self.skip)
@@ -320,6 +323,7 @@ class RescaleBlock(nn.Module):
         self.max_pool = nn.MaxPool2d(2, 2)
 
     def forward(self, input_tensor, pyramid=None, return_all_scales=False, skip=False):
+        #print('scale',self.scale)
 
         feature_map = input_tensor
         all_scales = []
@@ -330,10 +334,14 @@ class RescaleBlock(nn.Module):
 
             if self.scale > 1.0:
                 feature_map = f.interpolate(feature_map, scale_factor=self.scale, mode='nearest')
+                #print(self.scale)
+                #print("here\n",len(feature_map[0]),len(feature_map[0][0]),len(pyramid[-i - 2][0]),len(pyramid[-i - 2][0][0]))    
 
             feature_map = conv_layer(feature_map)
+            #print("here\n",len(feature_map[0]),len(feature_map[0][0]))
 
             if skip:
+                #print("here\n",len(feature_map[0]),len(feature_map[0][0]),'\n',len(pyramid[-i - 2][0]),len(pyramid[-i - 2][0][0]))
                 feature_map = feature_map + pyramid[-i - 2]
 
             if self.scale < 1.0:
@@ -357,30 +365,29 @@ class RandomCrop(nn.Module):
     def forward(self, input_tensors, crop_size=None):
         im_v_sz, im_h_sz = input_tensors[0].shape[2:]
         if crop_size is None:
-            cr_v_sz, cr_h_sz = np.clip(self.crop_size, [0, 0], [im_v_sz - 1, im_h_sz - 1])
-            cr_v_sz, cr_h_sz = np.uint32(
-                np.floor(np.array([cr_v_sz, cr_h_sz]) * 1.0 / self.must_divide) * self.must_divide
-            )
+            cr_v_sz, cr_h_sz = np.clip(self.crop_size, [0, 0], [im_v_sz-1, im_h_sz-1])
+            cr_v_sz, cr_h_sz = np.uint32(np.floor(np.array([cr_v_sz, cr_h_sz])
+                                                  * 1.0 / self.must_divide) * self.must_divide)                                   
         else:
             cr_v_sz, cr_h_sz = crop_size
 
-        top_left_v, top_left_h = [np.random.randint(0, im_v_sz - cr_v_sz), np.random.randint(0, im_h_sz - cr_h_sz)]
+        #print(im_v_sz,cr_v_sz,im_h_sz,cr_h_sz)
+        #top_left_v, top_left_h = [np.random.randint(0, im_v_sz - cr_v_sz), np.random.randint(0, im_h_sz - cr_h_sz)]
+        top_left_v, top_left_h = [0, np.random.randint(0, im_h_sz - cr_h_sz)]
+        
 
-        """
-        out_tensors = [
-            input_tensor[:, :, top_left_v:top_left_v + cr_v_sz,
-                         top_left_h:top_left_h + cr_h_sz] if input_tensor is not None else None
-            for input_tensor in input_tensors
-        ]
+
+        out_tensors = [input_tensor[:, :, top_left_v:top_left_v + cr_v_sz, top_left_h:top_left_h + cr_h_sz]
+                       if input_tensor is not None else None for input_tensor in input_tensors]
         """
         out_tensors = [
             input_tensor[:, :, 0:192,
                          top_left_h:top_left_h + cr_h_sz] if input_tensor is not None else None
             for input_tensor in input_tensors
         ]
-
+        """
         return (out_tensors, (top_left_v, top_left_h)) if self.return_pos else out_tensors
-
+        
 
 class SwapCrops(nn.Module):
     def __init__(self, min_crop_size, max_crop_size, mask_width=5):

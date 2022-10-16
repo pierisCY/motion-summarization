@@ -13,15 +13,19 @@ from option import TrainOptionParser
 from os.path import join as pjoin
 import time
 from torch.utils.tensorboard import SummaryWriter
+import util
 
 
 
 # Load configuration
 conf = Config().parse()
+interpolator = get_interpolator(conf)
 # Prepare data
 input_images1 = MotionData(conf.input_image_path[0],padding=1,use_velo=1,contact=1, keep_y_pos=1, joint_reduction=1, repr='repr6d')
-gen, input_images = create_model(conf, input_images1, evaluation=False)
-input_images = [input_images(input_images1.raw_motion.cuda())]
+#gen, input_images = create_model(conf, input_images1, evaluation=False)
+#input_images = [input_images(input_images1.raw_motion.cuda())]
+
+input_images = [input_images1.raw_motion.cuda()]
 input_images = torch.stack(input_images)                            
 
 # Create complete model
@@ -32,12 +36,15 @@ if conf.resume is not None:
 
 # Define visualizer to monitor learning process
 visualizer = Visualizer(gan, conf, [input_images])
+input_images1.write("test.bvh", input_images[0])
 
 # Main training loop
 for i in range(conf.max_iters + 1):
 
+
     # Train a single iteration on the current data instance
     try:
+        #print('shape',input_images.shape)
         gan.train_one_iter(i, input_images)
     except KeyboardInterrupt:
         raise

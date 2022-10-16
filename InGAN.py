@@ -43,7 +43,7 @@ class InGAN:
         )
         self.GAN_loss_layer = networks.GANLoss()
         self.Reconstruct_loss = networks.WeightedMSELoss(use_L1=conf.use_L1)
-        self.RandCrop = networks.RandomCrop([conf.input_crop_size, conf.input_crop_size], must_divide=conf.must_divide)
+        self.RandCrop = networks.RandomCrop([192, conf.input_crop_size], must_divide=conf.must_divide)
         self.SwapCrops = networks.SwapCrops(conf.crop_swap_min_size, conf.crop_swap_max_size)
 
         # Make all networks run on GPU
@@ -56,14 +56,16 @@ class InGAN:
 
         # Define loss function
         self.criterionGAN = self.GAN_loss_layer.forward
-        self.gp_loss =  self.GAN_loss_layer.forward_D
+        self.criterionGAN_D = self.GAN_loss_layer.forward_D
+        #self.gp_loss =  self.GAN_loss_layer.forward_D
         self.criterionReconstruction = self.Reconstruct_loss.forward
 
         # Keeping track of losses- prepare tensors
         self.losses_G_gan = torch.FloatTensor(conf.print_freq).cuda()
-        self.losses_D_real = torch.FloatTensor(conf.print_freq).cuda()
-        self.losses_D_fake = torch.FloatTensor(conf.print_freq).cuda()
-        self.losses_GP = torch.FloatTensor(conf.print_freq).cuda()
+        #self.losses_D_real = torch.FloatTensor(conf.print_freq).cuda()
+        #self.losses_D_fake = torch.FloatTensor(conf.print_freq).cuda()
+        self.losses_D = torch.FloatTensor(conf.print_freq).cuda()
+        #self.losses_GP = torch.FloatTensor(conf.print_freq).cuda()
         self.losses_G_reconstruct = torch.FloatTensor(conf.print_freq).cuda()
         if self.conf.reconstruct_loss_stop_iter > 0:
             self.losses_D_reconstruct = torch.FloatTensor(conf.print_freq).cuda()
@@ -198,6 +200,7 @@ class InGAN:
         self.optimizer_D.zero_grad()
 
         # Determine output size of G (dynamic change)
+        #print("im2",self.input_tensor.shape[2:])
         output_size, random_affine = random_size(
             orig_size=self.input_tensor.shape[2:],
             curriculum=self.conf.curriculum,
@@ -208,7 +211,9 @@ class InGAN:
             max_scale=self.conf.max_scale,
             max_transform_magniutude=self.conf.max_transform_magnitude
         )
-        output_size = (192,self.input_tensor.shape[3])
+        
+        output_size = self.output_size
+        #print(output_size)
         self.input_tensor_noised = self.input_tensor
 
         # Generator forward pass
@@ -234,9 +239,8 @@ class InGAN:
             self.loss_G_reconstruct = self.criterionReconstruction(self.reconstruct, self.input_tensor, self.loss_mask)
 
         # Calculate generator loss, based on discriminator prediction on generator result
-        self.loss_G_GAN = self.criterionGAN(d_pred_fake, is_d_input_real=True)
-        
-
+        #self.loss_G_GAN = self.criterionGAN(d_pred_fake, is_d_input_real=True)
+        self.loss_G_GAN = self.criterionGAN_D(self.D,self.scale_weights,self.real_example,self.G_pred,self.conf)
         # Generator final loss
         # Weighted average of the two losses (if indicated to use reconstruction loss)
         if self.conf.reconstruct_loss_stop_iter < self.cur_iter:
@@ -286,18 +290,21 @@ class InGAN:
         self.d_pred_fake = self.D.forward(g_pred_with_noise, self.scale_weights)
 
         # Calculate discriminator loss
-        self.loss_D_fake = self.criterionGAN(self.d_pred_fake, is_d_input_real=False)
-        self.loss_D_real = self.criterionGAN(self.d_pred_real, is_d_input_real=True)
-        self.loss_D = (self.loss_D_real + self.loss_D_fake) * 0.5
+        #self.loss_D_fake = self.criterionGAN(self.d_pred_fake, is_d_input_real=False)
+        #self.loss_D_real = self.criterionGAN(self.d_pred_real, is_d_input_real=True)
+        #self.loss_D = (self.loss_D_real + self.loss_D_fake) * 0.5
+        self.loss_D = self.criterionGAN_D(self.D,self.scale_weights,self.real_example,self.G_pred,self.conf)
 
         # Calculate gradients
         # Note that gradients are not propagating back through generator
         # noinspection PyUnresolvedReferences
         self.loss_D.backward(retain_graph=True)
+        self.loss_D.backward(retain_graph=True)
+        #self.loss_D.backward(retain_graph=True)
+                
+        #self.gp = self.gp_loss(self.D,self.scale_weights,self.real_example,self.G_pred,self.conf)
+        
         # Update weights
-        self.gp = self.gp_loss(self.D,self.scale_weights,self.real_example,self.G_pred,self.conf)
-        
-        
         # Note that only discriminator weights are updated (by definition of the D optimizer)
         self.optimizer_D.step()
 
@@ -311,7 +318,22 @@ class InGAN:
         real_example_crops = []
         mask_flag = False
         
-        real_example_crops += self.RandCrop.forward([input_tensor])
+        #print("im",self.input_tensor.shape[2:])
+        output_size, random_affine = random_size(
+            orig_size=(192,256),
+            curriculum=self.conf.curriculum,
+            i=self.cur_iter,
+            iter_for_max_range=self.conf.iter_for_max_range,
+            must_divide=self.conf.must_divide,
+            min_scale=self.conf.min_scale,
+            max_scale=self.conf.max_scale,
+            max_transform_magniutude=self.conf.max_transform_magnitude
+        )
+        
+        self.output_size = (192,output_size[1])
+        #print(self.output_size)
+
+        real_example_crops += self.RandCrop.forward([input_tensor],self.output_size)
 
         if np.random.rand() < self.conf.crop_swap_probability:
             swapped_input_tensor, loss_mask = self.SwapCrops.forward(input_tensor)
@@ -343,8 +365,9 @@ class InGAN:
         # Accumulate stats
         # Accumulating as cuda tensors is much more efficient than passing info from GPU to CPU at every iteration
         self.losses_G_gan[cur_iter % self.conf.print_freq] = self.loss_G_GAN.item()
-        self.losses_D_fake[cur_iter % self.conf.print_freq] = self.loss_D_fake.item()
-        self.losses_D_real[cur_iter % self.conf.print_freq] = self.loss_D_real.item()
-        self.losses_GP[cur_iter % self.conf.print_freq] = self.gp.item()
+        #self.losses_D_fake[cur_iter % self.conf.print_freq] = self.loss_D_fake.item()
+        #self.losses_D_real[cur_iter % self.conf.print_freq] = self.loss_D_real.item()
+        self.losses_D[cur_iter % self.conf.print_freq] = self.loss_D.item()
+        #self.losses_GP[cur_iter % self.conf.print_freq] = self.gp.item()
         if self.conf.reconstruct_loss_stop_iter > self.cur_iter:
             self.losses_G_reconstruct[cur_iter % self.conf.print_freq] = self.loss_G_reconstruct.item()
